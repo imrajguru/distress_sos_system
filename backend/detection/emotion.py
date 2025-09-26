@@ -1,20 +1,25 @@
- # detection/emotion.py
 from transformers import pipeline
 
-# Load Hugging Face pipeline for emotion detection
-emotion_classifier = pipeline("text-classification", 
-                              model="bhadresh-savani/distilbert-base-uncased-emotion", 
+# Use a stronger model
+emotion_classifier = pipeline("text-classification",
+                              model="argish/text-emotion-classifier-distilroberta",
                               return_all_scores=False)
+
 
 def analyze_emotion(text: str) -> str:
     try:
         result = emotion_classifier(text)
         if result and len(result) > 0:
             label = result[0]['label'].lower()
-            print(f"[Emotion] {label} (confidence: {result[0]['score']:.2f})")
-            return label
+            score = result[0]['score']
+            print(f"[Emotion] {label} (confidence: {score:.2f})")
+            if score >= 0.8:
+                return label
+            else:
+                return "neutral"
         return "neutral"
     except Exception as e:
         print("[!] Emotion analysis failed:", e)
         return "error"
+
 
