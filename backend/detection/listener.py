@@ -1,94 +1,63 @@
-# detection/listener.py
+# detection/sos.py
+import sys
+import os
+import sqlite3
+from datetime import datetime
 
-import sounddevice as sd
-import queue
-import json
-from vosk import Model, KaldiRecognizer
-from detection.emotion import analyze_emotion
-from detection.sos import send_sos
+from twilio.rest import Client
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Load Vosk model
-model = Model("model/vosk-model-small-en-us-0.15")
-recognizer = KaldiRecognizer(model, 16000)
+from config import TWILIO_SID, TWILIO_AUTH, TWILIO_PHONE, EMERGENCY_CONTACT
 
-# Audio queue
-q = queue.Queue()
+client = Client(TWILIO_SID, TWILIO_AUTH)
 
-# Flag to control start/stop
-listening = False
+def send_sos(trigger_text=None):
+    print("[🚨] Sending SOS alert via SMS and Call...")
 
+    # SMS
+    try:
+        message = client.messages.create(
+            body="🚨 Distress Detected! Please check on the user immediately.",
+            from_=TWILIO_PHONE,
+            to=EMERGENCY_CONTACT
+        )
+        print("[✅] SMS sent:", message.sid)
+    except Exception as e:
+        print("[❌] Failed to send SMS:", e)
 
-def callback(indata, frames, time, status):
-    if status:
-        print("[!] Audio Status:", status)
-    q.put(bytes(indata))
+    # Call
+    try:
+        call = client.calls.create(
+            twiml='<Response><Say>This is an emergency alert. The user may be in danger.</Say></Response>',
+            from_=TWILIO_PHONE,
+            to=EMERGENCY_CONTACT
+        )
+        print("[✅] Call initiated:", call.sid)
+    except Exception as e:
+        print("[❌] Failed to make call:", e)
 
-
-def capture_emotion():
-    print("[*] Listening for emotional context after wake word...")
-    collected = []
-
-    for _ in range(10):  # ~10 audio chunks
+    # Log to SQLite if trigger_text is provided (for voice-triggered SOS)
+    if trigger_text:
         try:
-            data = q.get(timeout=1)
-            if recognizer.AcceptWaveform(data):
-                result = json.loads(recognizer.Result())
-                text = result.get("text", "")
-                if text:
-                    print(f"[Captured Emotion Speech] {text}")
-                    collected.append(text)
-        except queue.Empty:
-            print("[!] No audio chunk received.")
-            break
-
-    full_text = " ".join(collected)
-    print("[Collected Text for Emotion Analysis]:", full_text)
-    return full_text
-
-
-def audio_stream():
-    global listening
-    print("🎙️ Voice detection started. Say 'help me' to trigger SOS.")
-    
-    with sd.RawInputStream(samplerate=16000, blocksize=8000, dtype='int16',
-                           channels=1, callback=callback):
-        while listening:
-            try:
-                data = q.get()
-                if recognizer.AcceptWaveform(data):
-                    result = json.loads(recognizer.Result())
-                    text = result.get("text", "")
-                    print(f"[Voice Input]: {text}")
-
-                    if "help me" in text.lower():
-                        print("🚨 Wake word detected!")
-                        emotion_text = capture_emotion()
-
-                        if emotion_text.strip() == "":
-                            print("[❌] No text captured for emotion analysis.")
-                        else:
-                            emotion = analyze_emotion(emotion_text)
-                            print(f"[Detected Emotion]: {emotion}")
-
-                            if emotion in ["fear", "anger", "sadness"]:
-                                send_sos()
-                                print("[🚨] SOS Triggered.")
-                                break  # Stop listening after SOS
-                            else:
-                                print("[ℹ️] Emotion not considered distress. Listening continues.")
-
-            except Exception as e:
-                print("[💥] Error in stream:", e)
-                break
-
-
-def start_listening():
-    global listening
-    listening = True
-    audio_stream()
-
-
-def stop_listening():
-    global listening
-    listening = False
-    print("🛑 Voice detection stopped.")
+            conn = sqlite3.connect('sos_logs.db')
+            cursor = conn.cursor()
+            # Create table if not exists
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS sos_triggers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    trigger_text TEXT NOT NULL
+                )
+            ''')
+            # Insert log with formatted timestamp
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor.execute('''
+                INSERT INTO sos_triggers (timestamp, trigger_text)
+                VALUES (?, ?)
+            ''', (timestamp, trigger_text))
+            conn.commit()
+            print("[✅] SOS log saved to database.")
+        except Exception as e:
+            print("[❌] Failed to log to database:", e)
+        finally:
+            conn.close()
