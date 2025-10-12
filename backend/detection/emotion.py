@@ -1,10 +1,11 @@
+# detection/emotion.py
+
 from transformers import pipeline
 
 # Use a stronger model
 emotion_classifier = pipeline("text-classification",
                               model="argish/text-emotion-classifier-distilroberta",
                               return_all_scores=False)
-
 
 def analyze_emotion(text: str) -> str:
     try:
@@ -21,5 +22,3 @@ def analyze_emotion(text: str) -> str:
     except Exception as e:
         print("[!] Emotion analysis failed:", e)
         return "error"
-
-
