@@ -9,7 +9,7 @@ from config import TWILIO_SID, TWILIO_AUTH, TWILIO_PHONE, EMERGENCY_CONTACT
 
 client = Client(TWILIO_SID, TWILIO_AUTH)
 
-def send_sos():
+def send_sos(trigger_text=None):
     print("[🚨] Sending SOS alert via SMS and Call...")
 
     # SMS
