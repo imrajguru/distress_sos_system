@@ -1,17 +1,20 @@
- # detection/sos.py
+# detection/sos.py
+
 import sys
 import os
-
+import sqlite3
+from datetime import datetime
 from twilio.rest import Client
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import TWILIO_SID, TWILIO_AUTH, TWILIO_PHONE, EMERGENCY_CONTACT
 
 client = Client(TWILIO_SID, TWILIO_AUTH)
 
-def send_sos():
+def send_sos(trigger_text=None):
     print("[🚨] Sending SOS alert via SMS and Call...")
-
+    
     # SMS
     try:
         message = client.messages.create(
@@ -22,7 +25,7 @@ def send_sos():
         print("[✅] SMS sent:", message.sid)
     except Exception as e:
         print("[❌] Failed to send SMS:", e)
-
+    
     # Call
     try:
         call = client.calls.create(
@@ -33,4 +36,30 @@ def send_sos():
         print("[✅] Call initiated:", call.sid)
     except Exception as e:
         print("[❌] Failed to make call:", e)
-
+    
+    # Log to SQLite if trigger_text is provided
+    if trigger_text:
+        try:
+            conn = sqlite3.connect('sos_logs.db')
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS sos_triggers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    trigger_text TEXT NOT NULL
+                )
+            ''')
+            
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor.execute('''
+                INSERT INTO sos_triggers (timestamp, trigger_text)
+                VALUES (?, ?)
+            ''', (timestamp, trigger_text))
+            
+            conn.commit()
+            print("[✅] SOS log saved to database.")
+        except Exception as e:
+            print("[❌] Failed to log to database:", e)
+        finally:
+            conn.close()
