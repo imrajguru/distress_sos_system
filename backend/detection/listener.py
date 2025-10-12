@@ -17,12 +17,10 @@ q = queue.Queue()
 # Flag to control start/stop
 listening = False
 
-
 def callback(indata, frames, time, status):
     if status:
         print("[!] Audio Status:", status)
     q.put(bytes(indata))
-
 
 def capture_emotion():
     print("[*] Listening for emotional context after wake word...")
@@ -44,7 +42,6 @@ def capture_emotion():
     full_text = " ".join(collected)
     print("[Collected Text for Emotion Analysis]:", full_text)
     return full_text
-
 
 def audio_stream():
     global listening
@@ -70,8 +67,8 @@ def audio_stream():
                             emotion = analyze_emotion(emotion_text)
                             print(f"[Detected Emotion]: {emotion}")
 
-                            if emotion in ["fear", "anger", "sadness"]:
-                                send_sos()
+                            if emotion in ["fear"]:
+                                send_sos(trigger_text=emotion_text)  # Pass the text that triggered SOS
                                 print("[🚨] SOS Triggered.")
                                 break  # Stop listening after SOS
                             else:
@@ -81,12 +78,10 @@ def audio_stream():
                 print("[💥] Error in stream:", e)
                 break
 
-
 def start_listening():
     global listening
     listening = True
     audio_stream()
-
 
 def stop_listening():
     global listening
